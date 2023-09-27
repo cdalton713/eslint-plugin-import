@@ -42,7 +42,7 @@ node_modules
 *.sublime-workspace
 
 # generated output
-lib/
+#lib/
 **/.nyc_output/
 
 # Only apps should have lockfiles
@@ -52,3 +52,5 @@ npm-shrinkwrap.json
 
 # macOS
 .DS_Store
+
+.yarn/

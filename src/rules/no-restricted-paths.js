@@ -3,7 +3,6 @@ import path from 'path';
 import resolve from 'eslint-module-utils/resolve';
 import moduleVisitor from 'eslint-module-utils/moduleVisitor';
 import isGlob from 'is-glob';
-import { Minimatch } from 'minimatch';
 import docsUrl from '../docsUrl';
 import importType from '../core/importType';
 
@@ -33,10 +32,10 @@ module.exports = {
               properties: {
                 target: {
                   anyOf: [
-                    { type: 'string' },
+                    {type: 'string'},
                     {
                       type: 'array',
-                      items: { type: 'string' },
+                      items: {type: 'string'},
                       uniqueItems: true,
                       minLength: 1,
                     },
@@ -44,10 +43,10 @@ module.exports = {
                 },
                 from: {
                   anyOf: [
-                    { type: 'string' },
+                    {type: 'string'},
                     {
                       type: 'array',
-                      items: { type: 'string' },
+                      items: {type: 'string'},
                       uniqueItems: true,
                       minLength: 1,
                     },
@@ -60,12 +59,12 @@ module.exports = {
                   },
                   uniqueItems: true,
                 },
-                message: { type: 'string' },
+                message: {type: 'string'},
               },
               additionalProperties: false,
             },
           },
-          basePath: { type: 'string' },
+          basePath: {type: 'string'},
         },
         additionalProperties: false,
       },
@@ -84,12 +83,8 @@ module.exports = {
     );
 
     function isMatchingTargetPath(filename, targetPath) {
-      if (isGlob(targetPath)) {
-        const mm = new Minimatch(targetPath);
-        return mm.match(filename);
-      }
-
-      return containsPath(filename, targetPath);
+      const mm = new RegExp(targetPath);
+      return mm.test(filename);
     }
 
     function isValidExceptionPath(absoluteFromPath, absoluteExceptionPath) {
@@ -134,13 +129,15 @@ module.exports = {
     function computeGlobPatternPathValidator(absoluteFrom, zoneExcept) {
       let isPathException;
 
-      const mm = new Minimatch(absoluteFrom);
-      const isPathRestricted = (absoluteImportPath) => mm.match(absoluteImportPath);
-      const hasValidExceptions = zoneExcept.every(isGlob);
+      const mm = new RegExp(absoluteFrom);
+      const isPathRestricted = (absoluteImportPath) => {
+        return mm.test(absoluteImportPath);
+      };
+      const hasValidExceptions = zoneExcept.every(() => true);
 
       if (hasValidExceptions) {
-        const exceptionsMm = zoneExcept.map((except) => new Minimatch(except));
-        isPathException = (absoluteImportPath) => exceptionsMm.some((mm) => mm.match(absoluteImportPath));
+        const exceptionsMm = zoneExcept.map((except) => new RegExp(except));
+        isPathException = (absoluteImportPath) => exceptionsMm.some((mm) => mm.test(absoluteImportPath));
       }
 
       const reportInvalidException = reportInvalidExceptionGlob;
@@ -188,14 +185,14 @@ module.exports = {
         context.report({
           node,
           message: `Unexpected path "{{importPath}}" imported in restricted zone.${customMessage ? ` ${customMessage}` : ''}`,
-          data: { importPath },
+          data: {importPath},
         });
       });
     }
 
     const makePathValidators = (zoneFrom, zoneExcept = []) => {
       const allZoneFrom = [].concat(zoneFrom);
-      const areGlobPatterns = allZoneFrom.map(isGlob);
+      const areGlobPatterns = allZoneFrom.map(() => true);
 
       if (areBothGlobPatternAndAbsolutePath(areGlobPatterns)) {
         return [computeMixedGlobAndAbsolutePathValidator()];
@@ -240,6 +237,6 @@ module.exports = {
 
     return moduleVisitor((source) => {
       checkForRestrictedImportPath(source.value, source);
-    }, { commonjs: true });
+    }, {commonjs: true});
   },
 };

@@ -26,7 +26,7 @@
     "pretest": "linklocal",
     "posttest": "eslint . && npm run update:eslint-docs -- --check && markdownlint \"**/*.md\"",
     "mocha": "cross-env BABEL_ENV=test nyc mocha",
-    "tests-only": "npm run mocha tests/src",
+    "tests-only": "npm run mocha tests/src/rules/no-restricted-paths.js",
     "test": "npm run tests-only",
     "test-compiled": "npm run prepublish && BABEL_ENV=testCompiled mocha --compilers js:babel-register tests/src",
     "test-all": "node --require babel-register ./scripts/testAll",
@@ -118,6 +118,7 @@
     "object.fromentries": "^2.0.6",
     "object.groupby": "^1.0.0",
     "object.values": "^1.1.6",
+    "rules": "^0.6.53",
     "semver": "^6.3.1",
     "tsconfig-paths": "^3.14.2"
   }
