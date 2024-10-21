@@ -2,25 +2,19 @@ import path from 'path';
 import { getPhysicalFilename } from 'eslint-module-utils/contextCompat';
 import resolve from 'eslint-module-utils/resolve';
 import moduleVisitor from 'eslint-module-utils/moduleVisitor';
-import isGlob from 'is-glob';
-import { Minimatch } from 'minimatch';
 
 import importType from '../core/importType';
 import docsUrl from '../docsUrl';
+
+function isMatchingTargetPath(filename, targetPath) {
+  const mm = new RegExp(targetPath);
+  return mm.test(filename);
+}
 
 const containsPath = (filepath, target) => {
   const relative = path.relative(target, filepath);
   return relative === '' || !relative.startsWith('..');
 };
-
-function isMatchingTargetPath(filename, targetPath) {
-  if (isGlob(targetPath)) {
-    const mm = new Minimatch(targetPath);
-    return mm.match(filename);
-  }
-
-  return containsPath(filename, targetPath);
-}
 
 module.exports = {
   meta: {
@@ -43,10 +37,10 @@ module.exports = {
               properties: {
                 target: {
                   anyOf: [
-                    {type: 'string'},
+                    { type: 'string' },
                     {
                       type: 'array',
-                      items: {type: 'string'},
+                      items: { type: 'string' },
                       uniqueItems: true,
                       minLength: 1,
                     },
@@ -54,10 +48,10 @@ module.exports = {
                 },
                 from: {
                   anyOf: [
-                    {type: 'string'},
+                    { type: 'string' },
                     {
                       type: 'array',
-                      items: {type: 'string'},
+                      items: { type: 'string' },
                       uniqueItems: true,
                       minLength: 1,
                     },
@@ -70,12 +64,12 @@ module.exports = {
                   },
                   uniqueItems: true,
                 },
-                message: {type: 'string'},
+                message: { type: 'string' },
               },
               additionalProperties: false,
             },
           },
-          basePath: {type: 'string'},
+          basePath: { type: 'string' },
         },
         additionalProperties: false,
       },
@@ -87,16 +81,12 @@ module.exports = {
     const restrictedPaths = options.zones || [];
     const basePath = options.basePath || process.cwd();
     const currentFilename = getPhysicalFilename(context);
+
     const matchingZones = restrictedPaths.filter(
       (zone) => [].concat(zone.target)
         .map((target) => path.resolve(basePath, target))
         .some((targetPath) => isMatchingTargetPath(currentFilename, targetPath)),
     );
-
-    function isMatchingTargetPath(filename, targetPath) {
-      const mm = new RegExp(targetPath);
-      return mm.test(filename);
-    }
 
     function isValidExceptionPath(absoluteFromPath, absoluteExceptionPath) {
       const relativeExceptionPath = path.relative(absoluteFromPath, absoluteExceptionPath);
@@ -141,9 +131,7 @@ module.exports = {
       let isPathException;
 
       const mm = new RegExp(absoluteFrom);
-      const isPathRestricted = (absoluteImportPath) => {
-        return mm.test(absoluteImportPath);
-      };
+      const isPathRestricted = (absoluteImportPath) => mm.test(absoluteImportPath);
       const hasValidExceptions = zoneExcept.every(() => true);
 
       if (hasValidExceptions) {
@@ -196,7 +184,7 @@ module.exports = {
         context.report({
           node,
           message: `Unexpected path "{{importPath}}" imported in restricted zone.${customMessage ? ` ${customMessage}` : ''}`,
-          data: {importPath},
+          data: { importPath },
         });
       });
     }
@@ -248,6 +236,6 @@ module.exports = {
 
     return moduleVisitor((source) => {
       checkForRestrictedImportPath(source.value, source);
-    }, {commonjs: true});
+    }, { commonjs: true });
   },
 };
