@@ -1,6 +1,6 @@
 import { test, getTSParsers, getNonDefaultParsers, testFilePath, parsers } from '../utils';
 
-import { RuleTester } from 'eslint';
+import { RuleTester, withoutAutofixOutput } from '../rule-tester';
 import eslintPkg from 'eslint/package.json';
 import semver from 'semver';
 import flatMap from 'array.prototype.flatmap';
@@ -20,10 +20,6 @@ const flowRuleTester = new RuleTester({
   },
 });
 const rule = require('rules/order');
-
-function withoutAutofixOutput(test) {
-  return { ...test, output: test.code };
-}
 
 ruleTester.run('order', rule, {
   valid: [
@@ -168,6 +164,34 @@ ruleTester.run('order', rule, {
         ['builtin', 'index'],
         ['sibling', 'parent', 'external'],
       ] }],
+    }),
+    // Grouping import types and alphabetize
+    test({
+      code: `
+        import async from 'async';
+        import fs from 'fs';
+        import path from 'path';
+
+        import index from '.';
+        import relParent3 from '../';
+        import relParent1 from '../foo';
+        import sibling from './foo';
+      `,
+      options: [{ groups: [
+        ['builtin', 'external'],
+      ], alphabetize: { order: 'asc', caseInsensitive: true } }],
+    }),
+    test({
+      code: `
+      import { fooz } from '../baz.js'
+      import { foo } from './bar.js'
+      `,
+      options: [{
+        alphabetize: { order: 'asc', caseInsensitive: true },
+        groups: ['builtin', 'external', 'internal', ['parent', 'sibling', 'index'], 'object'],
+        'newlines-between': 'always',
+        warnOnUnassignedImports: true,
+      }],
     }),
     // Omitted types should implicitly be considered as the last type
     test({
@@ -1105,6 +1129,140 @@ ruleTester.run('order', rule, {
         },
       ],
     }),
+    // named import order
+    test({
+      code: `
+        import { a, B as C, Z } from './Z';
+        const { D, n: c, Y } = require('./Z');
+        export { C, D };
+        export { A, B, C as default } from "./Z";
+
+        const { ["ignore require-statements with non-identifier imports"]: z, d } = require("./Z");
+        exports = { ["ignore exports statements with non-identifiers"]: Z, D };
+      `,
+      options: [{
+        named: true,
+        alphabetize: { order: 'asc', caseInsensitive: true },
+      }],
+    }),
+    test({
+      code: `
+        const { b, A } = require('./Z');
+      `,
+      options: [{
+        named: true,
+        alphabetize: { order: 'desc' },
+      }],
+    }),
+    test({
+      code: `
+        import { A, B } from "./Z";
+        export { Z, A } from "./Z";
+        export { N, P } from "./Z";
+        const { X, Y } = require("./Z");
+      `,
+      options: [{
+        named: {
+          require: true,
+          import: true,
+          export: false,
+        },
+      }],
+    }),
+    test({
+      code: `
+        import { B, A } from "./Z";
+        const { D, C } = require("./Z");
+        export { B, A } from "./Z";
+      `,
+      options: [{
+        named: {
+          require: false,
+          import: false,
+          export: false,
+        },
+      }],
+    }),
+    test({
+      code: `
+        import { B, A, R } from "foo";
+        const { D, O, G } = require("tunes");
+        export { B, A, Z } from "foo";
+      `,
+      options: [{
+        named: { enabled: false },
+      }],
+    }),
+    test({
+      code: `
+        import { A as A, A as B, A as C } from "./Z";
+        const { a, a: b, a: c } = require("./Z");
+      `,
+      options: [{
+        named: true,
+      }],
+    }),
+    test({
+      code: `
+        import { A, B, C } from "./Z";
+        exports = { A, B, C };
+        module.exports = { a: A, b: B, c: C };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+    }),
+    test({
+      code: `
+        module.exports.A = { };
+        module.exports.A.B = { };
+        module.exports.B = { };
+        exports.C = { };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+    }),
+    // ensure other assignments are untouched
+    test({
+      code: `
+        var exports = null;
+        var module = null;
+        exports = { };
+        module = { };
+        module.exports = { };
+        module.exports.U = { };
+        module.exports.N = { };
+        module.exports.C = { };
+        exports.L = { };
+        exports.E = { };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+    }),
+    test({
+      code: `
+        exports["B"] = { };
+        exports["C"] = { };
+        exports["A"] = { };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+    }),
   ],
   invalid: [
     // builtin before external module (require)
@@ -1744,14 +1902,8 @@ ruleTester.run('order', rule, {
       ],
     }),
     // Cannot fix newlines-between with multiline comment after
-    test({
+    test(withoutAutofixOutput({
       code: `
-        var fs = require('fs'); /* multiline
-        comment */
-
-        var index = require('./');
-      `,
-      output: `
         var fs = require('fs'); /* multiline
         comment */
 
@@ -1769,7 +1921,7 @@ ruleTester.run('order', rule, {
           message: 'There should be no empty line between import groups',
         },
       ],
-    }),
+    })),
     // Option newlines-between: 'always' - should report lack of newline between groups
     test({
       code: `
@@ -1855,15 +2007,8 @@ ruleTester.run('order', rule, {
     }),
     // Option newlines-between: 'never' with unassigned imports and warnOnUnassignedImports disabled
     // newline is preserved to match existing behavior
-    test({
+    test(withoutAutofixOutput({
       code: `
-        import path from 'path';
-        import 'loud-rejection';
-
-        import 'something-else';
-        import _ from 'lodash';
-      `,
-      output: `
         import path from 'path';
         import 'loud-rejection';
 
@@ -1877,7 +2022,7 @@ ruleTester.run('order', rule, {
           message: 'There should be no empty line between import groups',
         },
       ],
-    }),
+    })),
     // Option newlines-between: 'never' with unassigned imports and warnOnUnassignedImports enabled
     test({
       code: `
@@ -1902,15 +2047,8 @@ ruleTester.run('order', rule, {
       ],
     }),
     // Option newlines-between: 'never' cannot fix if there are other statements between imports
-    test({
+    test(withoutAutofixOutput({
       code: `
-        import path from 'path';
-        export const abc = 123;
-
-        import 'something-else';
-        import _ from 'lodash';
-      `,
-      output: `
         import path from 'path';
         export const abc = 123;
 
@@ -1924,7 +2062,7 @@ ruleTester.run('order', rule, {
           message: 'There should be no empty line between import groups',
         },
       ],
-    }),
+    })),
     // Option newlines-between: 'always' should report missing empty lines when using not assigned imports
     test({
       code: `
@@ -2008,18 +2146,8 @@ ruleTester.run('order', rule, {
       ],
     }),
     // reorder fix cannot cross function call on moving below #1
-    test({
+    test(withoutAutofixOutput({
       code: `
-        const local = require('./local');
-
-        fn_call();
-
-        const global1 = require('global1');
-        const global2 = require('global2');
-
-        fn_call();
-      `,
-      output: `
         const local = require('./local');
 
         fn_call();
@@ -2032,18 +2160,10 @@ ruleTester.run('order', rule, {
       errors: [{
         message: '`./local` import should occur after import of `global2`',
       }],
-    }),
+    })),
     // reorder fix cannot cross function call on moving below #2
-    test({
+    test(withoutAutofixOutput({
       code: `
-        const local = require('./local');
-        fn_call();
-        const global1 = require('global1');
-        const global2 = require('global2');
-
-        fn_call();
-      `,
-      output: `
         const local = require('./local');
         fn_call();
         const global1 = require('global1');
@@ -2054,23 +2174,10 @@ ruleTester.run('order', rule, {
       errors: [{
         message: '`./local` import should occur after import of `global2`',
       }],
-    }),
+    })),
     // reorder fix cannot cross function call on moving below #3
-    test({
+    test(withoutAutofixOutput({
       code: `
-        const local1 = require('./local1');
-        const local2 = require('./local2');
-        const local3 = require('./local3');
-        const local4 = require('./local4');
-        fn_call();
-        const global1 = require('global1');
-        const global2 = require('global2');
-        const global3 = require('global3');
-        const global4 = require('global4');
-        const global5 = require('global5');
-        fn_call();
-      `,
-      output: `
         const local1 = require('./local1');
         const local2 = require('./local2');
         const local3 = require('./local3');
@@ -2089,7 +2196,7 @@ ruleTester.run('order', rule, {
         '`./local3` import should occur after import of `global5`',
         '`./local4` import should occur after import of `global5`',
       ],
-    }),
+    })),
     // reorder fix cannot cross function call on moving below
     test(withoutAutofixOutput({
       code: `
@@ -2399,18 +2506,8 @@ ruleTester.run('order', rule, {
       }],
     })),
     // reorder fix cannot cross function call on moving below (from #1252)
-    test({
+    test(withoutAutofixOutput({
       code: `
-        const env = require('./config');
-
-        Object.keys(env);
-
-        const http = require('http');
-        const express = require('express');
-
-        http.createServer(express());
-      `,
-      output: `
         const env = require('./config');
 
         Object.keys(env);
@@ -2423,7 +2520,7 @@ ruleTester.run('order', rule, {
       errors: [{
         message: '`./config` import should occur after import of `express`',
       }],
-    }),
+    })),
     // reorder cannot cross non plain requires
     test(withoutAutofixOutput({
       code: `
@@ -2714,6 +2811,205 @@ ruleTester.run('order', rule, {
         message: 'There should be no empty line within import group',
       }],
     }),
+    // named import order
+    test({
+      code: `
+        var { B, A: R } = require("./Z");
+        import { O as G, D } from "./Z";
+        import { K, L, J } from "./Z";
+        export { Z, X, Y } from "./Z";
+      `,
+      output: `
+        var { A: R, B } = require("./Z");
+        import { D, O as G } from "./Z";
+        import { J, K, L } from "./Z";
+        export { X, Y, Z } from "./Z";
+      `,
+      options: [{
+        named: true,
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`A` import should occur before import of `B`',
+      }, {
+        message: '`D` import should occur before import of `O`',
+      }, {
+        message: '`J` import should occur before import of `K`',
+      }, {
+        message: '`Z` export should occur after export of `Y`',
+      }],
+    }),
+    test({
+      code: `
+        import { D, C } from "./Z";
+        var { B, A } = require("./Z");
+        export { B, A };
+      `,
+      output: `
+        import { C, D } from "./Z";
+        var { B, A } = require("./Z");
+        export { A, B };
+      `,
+      options: [{
+        named: {
+          require: false,
+          import: true,
+          export: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`C` import should occur before import of `D`',
+      }, {
+        message: '`A` export should occur before export of `B`',
+      }],
+    }),
+    test({
+      code: `
+        import { A as B, A as C, A } from "./Z";
+        export { A, A as D, A as B, A as C } from "./Z";
+        const { a: b, a: c, a } = require("./Z");
+      `,
+      output: `
+        import { A, A as B, A as C } from "./Z";
+        export { A, A as B, A as C, A as D } from "./Z";
+        const { a, a: b, a: c } = require("./Z");
+      `,
+      options: [{
+        named: true,
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`A` import should occur before import of `A as B`',
+      }, {
+        message: '`A as D` export should occur after export of `A as C`',
+      }, {
+        message: '`a` import should occur before import of `a as b`',
+      }],
+    }),
+    test({
+      code: `
+        import { A, B, C } from "./Z";
+        exports = { B, C, A };
+        module.exports = { c: C, a: A, b: B };
+      `,
+      output: `
+        import { A, B, C } from "./Z";
+        exports = { A, B, C };
+        module.exports = { a: A, b: B, c: C };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`A` export should occur before export of `B`',
+      }, {
+        message: '`c` export should occur after export of `b`',
+      }],
+    }),
+    test({
+      code: `
+        exports.B = { };
+        module.exports.A = { };
+        module.exports.C = { };
+      `,
+      output: `
+        module.exports.A = { };
+        exports.B = { };
+        module.exports.C = { };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`A` export should occur before export of `B`',
+      }],
+    }),
+    test({
+      code: `
+        exports.A.C = { };
+        module.exports.A.A = { };
+        exports.A.B = { };
+      `,
+      output: `
+        module.exports.A.A = { };
+        exports.A.B = { };
+        exports.A.C = { };
+      `,
+      options: [{
+        named: {
+          cjsExports: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`A.C` export should occur after export of `A.B`',
+      }],
+    }),
+    // multiline named specifiers & trailing commas
+    test({
+      code: `
+        const {
+          F: O,
+          O: B,
+          /* Hello World */
+          A: R
+        } = require("./Z");
+        import {
+          Y,
+          X,
+        } from "./Z";
+        export {
+          Z, A,
+          B
+        } from "./Z";
+        module.exports = {
+          a: A, o: O,
+          b: B
+        };
+      `,
+      output: `
+        const {
+          /* Hello World */
+          A: R,
+          F: O,
+          O: B
+        } = require("./Z");
+        import {
+          X,
+          Y,
+        } from "./Z";
+        export { A,
+          B,
+          Z
+        } from "./Z";
+        module.exports = {
+          a: A,
+          b: B, o: O
+        };
+      `,
+      options: [{
+        named: {
+          enabled: true,
+        },
+        alphabetize: { order: 'asc' },
+      }],
+      errors: [{
+        message: '`A` import should occur before import of `F`',
+      }, {
+        message: '`X` import should occur before import of `Y`',
+      }, {
+        message: '`Z` export should occur after export of `B`',
+      }, {
+        message: '`b` export should occur before export of `o`',
+      }],
+    }),
     // Alphabetize with require
     ...semver.satisfies(eslintPkg.version, '< 3.0.0') ? [] : [
       test({
@@ -2744,6 +3040,9 @@ context('TypeScript', function () {
     // Type-only imports were added in TypeScript ESTree 2.23.0
     .filter((parser) => parser !== parsers.TS_OLD)
     .forEach((parser) => {
+      const supportsTypeSpecifiers = semver.satisfies(require('@typescript-eslint/parser/package.json').version, '>= 5');
+      const supportsImportTypeSpecifiers = parser !== parsers.TS_NEW || supportsTypeSpecifiers;
+      const supportsExportTypeSpecifiers = parser === parsers.TS_NEW && supportsTypeSpecifiers;
       const parserConfig = {
         parser,
         settings: {
@@ -3133,14 +3432,8 @@ context('TypeScript', function () {
             ],
           }),
           // warns for out of order unassigned imports (warnOnUnassignedImports enabled)
-          test({
+          test(withoutAutofixOutput({
             code: `
-              import './local1';
-              import global from 'global1';
-              import local from './local2';
-              import 'global2';
-            `,
-            output: `
               import './local1';
               import global from 'global1';
               import local from './local2';
@@ -3155,18 +3448,10 @@ context('TypeScript', function () {
               },
             ],
             options: [{ warnOnUnassignedImports: true }],
-          }),
+          })),
           // fix cannot move below unassigned import (warnOnUnassignedImports enabled)
-          test({
+          test(withoutAutofixOutput({
             code: `
-              import local from './local';
-
-              import 'global1';
-
-              import global2 from 'global2';
-              import global3 from 'global3';
-            `,
-            output: `
               import local from './local';
 
               import 'global1';
@@ -3178,7 +3463,7 @@ context('TypeScript', function () {
               message: '`./local` import should occur after import of `global3`',
             }],
             options: [{ warnOnUnassignedImports: true }],
-          }),
+          })),
           // Imports inside module declaration
           test({
             code: `
@@ -3210,6 +3495,108 @@ context('TypeScript', function () {
               },
             ],
           }),
+          // named import order
+          test({
+            code: `
+              import { type Z, A } from "./Z";
+              import type N, { E, D } from "./Z";
+              import type { L, G } from "./Z";
+            `,
+            output: `
+              import { A, type Z } from "./Z";
+              import type N, { D, E } from "./Z";
+              import type { G, L } from "./Z";
+            `,
+            ...parserConfig,
+            options: [{
+              named: true,
+              alphabetize: { order: 'asc' },
+            }],
+            errors: [
+              { message: `\`A\` import should occur before${supportsImportTypeSpecifiers ? ' type' : ''} import of \`Z\`` },
+              { message: '`D` import should occur before import of `E`' },
+              { message: '`G` import should occur before import of `L`' },
+            ],
+          }),
+          test({
+            code: `
+              const { B, /* Hello World */ A } = require("./Z");
+              export { B, A } from "./Z";
+            `,
+            output: `
+              const { /* Hello World */ A, B } = require("./Z");
+              export { A, B } from "./Z";
+            `,
+            ...parserConfig,
+            options: [{
+              named: true,
+              alphabetize: { order: 'asc' },
+            }],
+            errors: [{
+              message: '`A` import should occur before import of `B`',
+            }, {
+              message: '`A` export should occur before export of `B`',
+            }],
+          }),
+
+          supportsExportTypeSpecifiers ? [
+            test({
+              code: `
+                export { type B, A };
+              `,
+              output: `
+                export { A, type B };
+              `,
+              ...parserConfig,
+              options: [{
+                named: {
+                  enabled: true,
+                  types: 'mixed',
+                },
+                alphabetize: { order: 'asc' },
+              }],
+              errors: [{
+                message: '`A` export should occur before type export of `B`',
+              }],
+            }),
+            test({
+              code: `
+                import { type B, A, default as C } from "./Z";
+              `,
+              output: `
+                import { A, default as C, type B } from "./Z";
+              `,
+              ...parserConfig,
+              options: [{
+                named: {
+                  import: true,
+                  types: 'types-last',
+                },
+                alphabetize: { order: 'asc' },
+              }],
+              errors: [{
+                message: '`B` type import should occur after import of `default`',
+              }],
+            }),
+            test({
+              code: `
+                export { A, type Z } from "./Z";
+              `,
+              output: `
+                export { type Z, A } from "./Z";
+              `,
+              ...parserConfig,
+              options: [{
+                named: {
+                  enabled: true,
+                  types: 'types-first',
+                },
+              }],
+              errors: [
+                { message: '`Z` type export should occur before export of `A`' },
+              ],
+            }),
+          ] : [],
 
           isCoreModule('node:child_process') && isCoreModule('node:fs/promises') ? [
             test({

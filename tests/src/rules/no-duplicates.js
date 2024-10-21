@@ -2,7 +2,7 @@ import * as path from 'path';
 import { test as testUtil, getNonDefaultParsers, parsers, tsVersionSatisfies, typescriptEslintParserSatisfies } from '../utils';
 import jsxConfig from '../../../config/react';
 
-import { RuleTester } from 'eslint';
+import { RuleTester, withoutAutofixOutput } from '../rule-tester';
 import eslintPkg from 'eslint/package.json';
 import semver from 'semver';
 import flatMap from 'array.prototype.flatmap';
@@ -96,15 +96,14 @@ ruleTester.run('no-duplicates', rule, {
     }),
 
     // #86: duplicate unresolved modules should be flagged
-    test({
+    // Autofix bail because of different default import names.
+    test(withoutAutofixOutput({
       code: "import foo from 'non-existent'; import bar from 'non-existent';",
-      // Autofix bail because of different default import names.
-      output: "import foo from 'non-existent'; import bar from 'non-existent';",
       errors: [
         "'non-existent' imported multiple times.",
         "'non-existent' imported multiple times.",
       ],
-    }),
+    })),
 
     test({
       code: "import type { x } from './foo'; import type { y } from './foo'",
@@ -227,12 +226,11 @@ ruleTester.run('no-duplicates', rule, {
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
     }),
 
-    test({
+    // Autofix bail because cannot merge namespace imports.
+    test(withoutAutofixOutput({
       code: "import * as ns1 from './foo'; import * as ns2 from './foo'",
-      // Autofix bail because cannot merge namespace imports.
-      output: "import * as ns1 from './foo'; import * as ns2 from './foo'",
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
+    })),
 
     test({
       code: "import * as ns from './foo'; import {x} from './foo'; import {y} from './foo'",
@@ -248,89 +246,57 @@ ruleTester.run('no-duplicates', rule, {
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
     }),
 
-    test({
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         // some-tool-disable-next-line
         import {x} from './foo'
         import {//y\ny} from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        // some-tool-disable-next-line
-        import {x} from './foo'
-        import {//y\ny} from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         // some-tool-disable-next-line
         import {y} from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        // some-tool-disable-next-line
-        import {y} from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo' // some-tool-disable-line
         import {y} from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo' // some-tool-disable-line
-        import {y} from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         import {y} from './foo' // some-tool-disable-line
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        import {y} from './foo' // some-tool-disable-line
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         /* comment */ import {y} from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        /* comment */ import {y} from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         import {y} from './foo' /* comment
         multiline */
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        import {y} from './foo' /* comment
-        multiline */
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
+    })),
 
     test({
       code: `
@@ -361,75 +327,48 @@ import {x,y} from './foo'
       `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
     }),
-
-    test({
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         import/* comment */{y} from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        import/* comment */{y} from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         import/* comment */'./foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        import/* comment */'./foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         import{y}/* comment */from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        import{y}/* comment */from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from './foo'
         import{y}from/* comment */'./foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from './foo'
-        import{y}from/* comment */'./foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
-
-    test({
+    })),
+    // Autofix bail because of comment.
+    test(withoutAutofixOutput({
       code: `
         import {x} from
         // some-tool-disable-next-line
         './foo'
         import {y} from './foo'
       `,
-      // Autofix bail because of comment.
-      output: `
-        import {x} from
-        // some-tool-disable-next-line
-        './foo'
-        import {y} from './foo'
-      `,
       errors: ['\'./foo\' imported multiple times.', '\'./foo\' imported multiple times.'],
-    }),
+    })),
 
     // #2027 long import list generate empty lines
     test({
@@ -455,31 +394,93 @@ import {x,y} from './foo'
         import {
           BULK_ACTIONS_ENABLED
         } from '../constants';
-        
+        ${''}
         const TestComponent = () => {
           return <div>
           </div>;
         }
-        
+        ${''}
         export default TestComponent;
       `,
       output: `
         import {
           DEFAULT_FILTER_KEYS,
           BULK_DISABLED,
-        
+        ${''}
           BULK_ACTIONS_ENABLED
         } from '../constants';
         import React from 'react';
-                
+                ${''}
         const TestComponent = () => {
           return <div>
           </div>;
         }
-        
+        ${''}
         export default TestComponent;
       `,
       errors: ["'../constants' imported multiple times.", "'../constants' imported multiple times."],
+      ...jsxConfig,
+    }),
+
+    test({
+      code: `
+        import {A1,} from 'foo';
+        import {B1,} from 'foo';
+        import {C1,} from 'foo';
+
+        import {
+          A2,
+        } from 'bar';
+        import {
+          B2,
+        } from 'bar';
+        import {
+          C2,
+        } from 'bar';
+
+      `,
+      output: `
+        import {A1,B1,C1} from 'foo';
+                ${''}
+        import {
+          A2,
+        ${''}
+          B2,
+          C2} from 'bar';
+                ${''}
+      `,
+      errors: [
+        {
+          message: "'foo' imported multiple times.",
+          line: 2,
+          column: 27,
+        },
+        {
+          message: "'foo' imported multiple times.",
+          line: 3,
+          column: 27,
+        },
+        {
+          message: "'foo' imported multiple times.",
+          line: 4,
+          column: 27,
+        },
+        {
+          message: "'bar' imported multiple times.",
+          line: 8,
+          column: 16,
+        },
+        {
+          message: "'bar' imported multiple times.",
+          line: 11,
+          column: 16,
+        },
+        {
+          message: "'bar' imported multiple times.",
+          line: 14,
+          column: 16,
+        },
+      ],
       ...jsxConfig,
     }),
   ],
@@ -554,9 +555,8 @@ context('TypeScript', function () {
       ]);
 
       const invalid = [
-        test({
+        test(withoutAutofixOutput({
           code: "import type x from './foo'; import type y from './foo'",
-          output: "import type x from './foo'; import type y from './foo'",
           ...parserConfig,
           errors: [
             {
@@ -570,7 +570,7 @@ context('TypeScript', function () {
               message: "'./foo' imported multiple times.",
             },
           ],
-        }),
+        })),
         test({
           code: "import type x from './foo'; import type x from './foo'",
           output: "import type x from './foo'; ",
@@ -626,6 +626,24 @@ context('TypeScript', function () {
         }),
         test({
           code: "import {type x} from 'foo'; import type {y} from 'foo'",
+          ...parserConfig,
+          options: [{ 'prefer-inline': true }],
+          output: `import {type x,type y} from 'foo'; `,
+          errors: [
+            {
+              line: 1,
+              column: 22,
+              message: "'foo' imported multiple times.",
+            },
+            {
+              line: 1,
+              column: 50,
+              message: "'foo' imported multiple times.",
+            },
+          ],
+        }),
+        test({
+          code: "import type {x} from 'foo'; import {type y} from 'foo'",
           ...parserConfig,
           options: [{ 'prefer-inline': true }],
           output: `import {type x,type y} from 'foo'; `,

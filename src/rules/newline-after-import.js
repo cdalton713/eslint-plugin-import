@@ -3,6 +3,8 @@
  * @author Radek Benkel
  */
 
+import { getPhysicalFilename, getScope } from 'eslint-module-utils/contextCompat';
+
 import isStaticRequire from '../core/staticRequire';
 import docsUrl from '../docsUrl';
 
@@ -124,7 +126,7 @@ module.exports = {
       }
     }
 
-    function commentAfterImport(node, nextComment) {
+    function commentAfterImport(node, nextComment, type) {
       const lineDifference = getLineDifference(node, nextComment);
       const EXPECTED_LINE_DIFFERENCE = options.count + 1;
 
@@ -140,7 +142,7 @@ module.exports = {
             line: node.loc.end.line,
             column,
           },
-          message: `Expected ${options.count} empty line${options.count > 1 ? 's' : ''} after import statement not followed by another import.`,
+          message: `Expected ${options.count} empty line${options.count > 1 ? 's' : ''} after ${type} statement not followed by another ${type}.`,
           fix: options.exactCount && EXPECTED_LINE_DIFFERENCE < lineDifference ? undefined : (fixer) => fixer.insertTextAfter(
             node,
             '\n'.repeat(EXPECTED_LINE_DIFFERENCE - lineDifference),
@@ -178,7 +180,7 @@ module.exports = {
       }
 
       if (nextComment && typeof nextComment !== 'undefined') {
-        commentAfterImport(node, nextComment);
+        commentAfterImport(node, nextComment, 'import');
       } else if (nextNode && nextNode.type !== 'ImportDeclaration' && (nextNode.type !== 'TSImportEqualsDeclaration' || nextNode.isExport)) {
         checkForNewLine(node, nextNode, 'import');
       }
@@ -192,9 +194,9 @@ module.exports = {
           requireCalls.push(node);
         }
       },
-      'Program:exit'() {
-        log('exit processing for', context.getPhysicalFilename ? context.getPhysicalFilename() : context.getFilename());
-        const scopeBody = getScopeBody(context.getScope());
+      'Program:exit'(node) {
+        log('exit processing for', getPhysicalFilename(context));
+        const scopeBody = getScopeBody(getScope(context, node));
         log('got scope:', scopeBody);
 
         requireCalls.forEach((node, index) => {
@@ -215,8 +217,18 @@ module.exports = {
               || !containsNodeOrEqual(nextStatement, nextRequireCall)
             )
           ) {
+            let nextComment;
+            if (typeof statementWithRequireCall.parent.comments !== 'undefined' && options.considerComments) {
+              const endLine = node.loc.end.line;
+              nextComment = statementWithRequireCall.parent.comments.find((o) => o.loc.start.line >= endLine && o.loc.start.line <= endLine + options.count + 1);
+            }
 
-            checkForNewLine(statementWithRequireCall, nextStatement, 'require');
+            if (nextComment && typeof nextComment !== 'undefined') {
+
+              commentAfterImport(statementWithRequireCall, nextComment, 'require');
+            } else {
+              checkForNewLine(statementWithRequireCall, nextStatement, 'require');
+            }
           }
         });
       },

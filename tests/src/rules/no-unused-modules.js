@@ -2,7 +2,7 @@ import { test, testVersion, testFilePath, getTSParsers, parsers } from '../utils
 import jsxConfig from '../../../config/react';
 import typescriptConfig from '../../../config/typescript';
 
-import { RuleTester } from 'eslint';
+import { RuleTester } from '../rule-tester';
 import fs from 'fs';
 import eslintPkg from 'eslint/package.json';
 import semver from 'semver';
@@ -34,6 +34,13 @@ const unusedExportsOptions = [{
 
 const unusedExportsTypescriptOptions = [{
   unusedExports: true,
+  src: [testFilePath('./no-unused-modules/typescript')],
+  ignoreExports: undefined,
+}];
+
+const unusedExportsTypescriptIgnoreUnusedTypesOptions = [{
+  unusedExports: true,
+  ignoreUnusedTypeExports: true,
   src: [testFilePath('./no-unused-modules/typescript')],
   ignoreExports: undefined,
 }];
@@ -160,6 +167,15 @@ ruleTester.run('no-unused-modules', rule, {
       filename: testFilePath('./no-unused-modules/file-o.js'),
       parser: parsers.BABEL_OLD,
     }),
+    test({
+      options: unusedExportsOptions,
+      code: `
+        export const [o0, o2] = createLoadingAndErrorSelectors(
+          AUTH_USER
+        );
+      `,
+      filename: testFilePath('./no-unused-modules/file-o.js'),
+    }),
   ],
   invalid: [
     test({
@@ -272,8 +288,8 @@ describe('dynamic imports', function () {
 
   // test for unused exports with `import()`
   ruleTester.run('no-unused-modules', rule, {
-    valid: [
-      test({
+    valid: [].concat(
+      testVersion('< 9', () => ({
         options: unusedExportsOptions,
         code: `
             export const a = 10
@@ -284,10 +300,10 @@ describe('dynamic imports', function () {
             `,
         parser: parsers.BABEL_OLD,
         filename: testFilePath('./no-unused-modules/exports-for-dynamic-js.js'),
-      }),
-    ],
-    invalid: [
-      test({
+      })),
+    ),
+    invalid: [].concat(
+      testVersion('< 9', () => ({
         options: unusedExportsOptions,
         code: `
         export const a = 10
@@ -303,8 +319,8 @@ describe('dynamic imports', function () {
           error(`exported declaration 'b' not used within other modules`),
           error(`exported declaration 'c' not used within other modules`),
           error(`exported declaration 'default' not used within other modules`),
-        ] }),
-    ],
+        ] })),
+    ),
   });
   typescriptRuleTester.run('no-unused-modules', rule, {
     valid: [
@@ -723,7 +739,7 @@ describe('renameDefault', () => {
 
 describe('test behavior for new file', () => {
   before(() => {
-    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-0.js'), '', { encoding: 'utf8' });
+    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-0.js'), '', { encoding: 'utf8', flag: 'w' });
   });
 
   // add import in newly created file
@@ -831,7 +847,7 @@ describe('test behavior for new file', () => {
 
   describe('test behavior for new file', () => {
     before(() => {
-      fs.writeFileSync(testFilePath('./no-unused-modules/file-added-1.js'), '', { encoding: 'utf8' });
+      fs.writeFileSync(testFilePath('./no-unused-modules/file-added-1.js'), '', { encoding: 'utf8', flag: 'w' });
     });
     ruleTester.run('no-unused-modules', rule, {
       valid: [
@@ -866,7 +882,7 @@ describe('test behavior for new file', () => {
 
 describe('test behavior for new file', () => {
   before(() => {
-    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-2.js'), '', { encoding: 'utf8' });
+    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-2.js'), '', { encoding: 'utf8', flag: 'w' });
   });
   ruleTester.run('no-unused-modules', rule, {
     valid: [
@@ -892,7 +908,7 @@ describe('test behavior for new file', () => {
 
 describe('test behavior for new file', () => {
   before(() => {
-    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-3.js'), '', { encoding: 'utf8' });
+    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-3.js'), '', { encoding: 'utf8', flag: 'w' });
   });
   ruleTester.run('no-unused-modules', rule, {
     valid: [
@@ -943,7 +959,7 @@ describe('test behavior for destructured exports', () => {
 
 describe('test behavior for new file', () => {
   before(() => {
-    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-4.js.js'), '', { encoding: 'utf8' });
+    fs.writeFileSync(testFilePath('./no-unused-modules/file-added-4.js.js'), '', { encoding: 'utf8', flag: 'w' });
   });
   ruleTester.run('no-unused-modules', rule, {
     valid: [
@@ -1196,6 +1212,66 @@ context('TypeScript', function () {
           ],
         }),
       ),
+    });
+  });
+});
+
+describe('ignoreUnusedTypeExports', () => {
+  getTSParsers().forEach((parser) => {
+    typescriptRuleTester.run('no-unused-modules', rule, {
+      valid: [
+        // unused vars should not report
+        test({
+          options: unusedExportsTypescriptIgnoreUnusedTypesOptions,
+          code: `export interface c {};`,
+          parser,
+          filename: testFilePath(
+            './no-unused-modules/typescript/file-ts-c-unused.ts',
+          ),
+        }),
+        test({
+          options: unusedExportsTypescriptIgnoreUnusedTypesOptions,
+          code: `export type d = {};`,
+          parser,
+          filename: testFilePath(
+            './no-unused-modules/typescript/file-ts-d-unused.ts',
+          ),
+        }),
+        test({
+          options: unusedExportsTypescriptIgnoreUnusedTypesOptions,
+          code: `export enum e { f };`,
+          parser,
+          filename: testFilePath(
+            './no-unused-modules/typescript/file-ts-e-unused.ts',
+          ),
+        }),
+        // used vars should not report
+        test({
+          options: unusedExportsTypescriptIgnoreUnusedTypesOptions,
+          code: `export interface c {};`,
+          parser,
+          filename: testFilePath(
+            './no-unused-modules/typescript/file-ts-c-used-as-type.ts',
+          ),
+        }),
+        test({
+          options: unusedExportsTypescriptIgnoreUnusedTypesOptions,
+          code: `export type d = {};`,
+          parser,
+          filename: testFilePath(
+            './no-unused-modules/typescript/file-ts-d-used-as-type.ts',
+          ),
+        }),
+        test({
+          options: unusedExportsTypescriptIgnoreUnusedTypesOptions,
+          code: `export enum e { f };`,
+          parser,
+          filename: testFilePath(
+            './no-unused-modules/typescript/file-ts-e-used-as-type.ts',
+          ),
+        }),
+      ],
+      invalid: [],
     });
   });
 });

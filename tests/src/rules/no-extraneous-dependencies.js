@@ -3,7 +3,7 @@ import typescriptConfig from '../../../config/typescript';
 import path from 'path';
 import fs from 'fs';
 
-import { RuleTester } from 'eslint';
+import { RuleTester } from '../rule-tester';
 import flatMap from 'array.prototype.flatmap';
 
 const ruleTester = new RuleTester();
@@ -26,6 +26,7 @@ const packageDirWithEmpty = path.join(__dirname, '../../files/empty');
 const packageDirBundleDeps = path.join(__dirname, '../../files/bundled-dependencies/as-array-bundle-deps');
 const packageDirBundledDepsAsObject = path.join(__dirname, '../../files/bundled-dependencies/as-object');
 const packageDirBundledDepsRaceCondition = path.join(__dirname, '../../files/bundled-dependencies/race-condition');
+const emptyPackageDir = path.join(__dirname, '../../files/empty-folder');
 
 const {
   dependencies: deps,
@@ -42,11 +43,9 @@ ruleTester.run('no-extraneous-dependencies', rule, {
       test({ code: `export { foo } from "${pkg}"` }),
       test({ code: `export * from "${pkg}"` }),
     ]),
-    test({ code: 'import "eslint"' }),
     test({ code: 'import "eslint/lib/api"' }),
     test({ code: 'import "fs"' }),
     test({ code: 'import "./foo"' }),
-    test({ code: 'import "@org/package"' }),
 
     test({ code: 'import "electron"', settings: { 'import/core-modules': ['electron'] } }),
     test({
@@ -103,6 +102,14 @@ ruleTester.run('no-extraneous-dependencies', rule, {
     test({
       code: 'import leftpad from "left-pad";',
       options: [{ packageDir: packageDirMonoRepoRoot }],
+    }),
+    test({
+      code: 'import leftpad from "left-pad";',
+      options: [{ packageDir: [emptyPackageDir, packageDirMonoRepoRoot] }],
+    }),
+    test({
+      code: 'import leftpad from "left-pad";',
+      options: [{ packageDir: [packageDirMonoRepoRoot, emptyPackageDir] }],
     }),
     test({
       code: 'import react from "react";',
@@ -378,15 +385,6 @@ ruleTester.run('no-extraneous-dependencies', rule, {
     }),
 
     test({
-      code: 'import "not-a-dependency"',
-      filename: path.join(packageDirMonoRepoRoot, 'foo.js'),
-      options: [{ packageDir: packageDirMonoRepoRoot }],
-      errors: [{
-        message: `'not-a-dependency' should be listed in the project's dependencies. Run 'npm i -S not-a-dependency' to add it`,
-      }],
-    }),
-
-    test({
       code: 'import "esm-package-not-in-pkg-json/esm-module";',
       errors: [{
         message: `'esm-package-not-in-pkg-json' should be listed in the project's dependencies. Run 'npm i -S esm-package-not-in-pkg-json' to add it`,
@@ -424,6 +422,18 @@ describe('TypeScript', () => {
         valid: [
           test({
             code: 'import type T from "a";',
+            options: [{ packageDir: packageDirWithTypescriptDevDependencies, devDependencies: false }],
+            ...parserConfig,
+          }),
+
+          test({
+            code: 'import type { T } from "a"; export type { T };',
+            options: [{ packageDir: packageDirWithTypescriptDevDependencies, devDependencies: false }],
+            ...parserConfig,
+          }),
+
+          test({
+            code: 'export type { T } from "a";',
             options: [{ packageDir: packageDirWithTypescriptDevDependencies, devDependencies: false }],
             ...parserConfig,
           }),

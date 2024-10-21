@@ -1,5 +1,6 @@
 import declaredScope from 'eslint-module-utils/declaredScope';
-import Exports from '../ExportMap';
+import ExportMapBuilder from '../exportMap/builder';
+import ExportMap from '../exportMap';
 import importDeclaration from '../importDeclaration';
 import docsUrl from '../docsUrl';
 
@@ -8,7 +9,7 @@ function processBodyStatement(context, namespaces, declaration) {
 
   if (declaration.specifiers.length === 0) { return; }
 
-  const imports = Exports.get(declaration.source.value, context);
+  const imports = ExportMapBuilder.get(declaration.source.value, context);
   if (imports == null) { return null; }
 
   if (imports.errors.length > 0) {
@@ -86,9 +87,9 @@ module.exports = {
 
       // same as above, but does not add names to local map
       ExportNamespaceSpecifier(namespace) {
-        const declaration = importDeclaration(context);
+        const declaration = importDeclaration(context, namespace);
 
-        const imports = Exports.get(declaration.source.value, context);
+        const imports = ExportMapBuilder.get(declaration.source.value, context);
         if (imports == null) { return null; }
 
         if (imports.errors.length) {
@@ -109,7 +110,7 @@ module.exports = {
       MemberExpression(dereference) {
         if (dereference.object.type !== 'Identifier') { return; }
         if (!namespaces.has(dereference.object.name)) { return; }
-        if (declaredScope(context, dereference.object.name) !== 'module') { return; }
+        if (declaredScope(context, dereference.object.name, dereference) !== 'module') { return; }
 
         if (dereference.parent.type === 'AssignmentExpression' && dereference.parent.left === dereference) {
           context.report(
@@ -122,7 +123,7 @@ module.exports = {
         let namespace = namespaces.get(dereference.object.name);
         const namepath = [dereference.object.name];
         // while property is namespace and parent is member expression, keep validating
-        while (namespace instanceof Exports && dereference.type === 'MemberExpression') {
+        while (namespace instanceof ExportMap && dereference.type === 'MemberExpression') {
           if (dereference.computed) {
             if (!allowComputed) {
               context.report(
@@ -157,11 +158,11 @@ module.exports = {
         if (!namespaces.has(init.name)) { return; }
 
         // check for redefinition in intermediate scopes
-        if (declaredScope(context, init.name) !== 'module') { return; }
+        if (declaredScope(context, init.name, init) !== 'module') { return; }
 
         // DFS traverse child namespaces
         function testKey(pattern, namespace, path = [init.name]) {
-          if (!(namespace instanceof Exports)) { return; }
+          if (!(namespace instanceof ExportMap)) { return; }
 
           if (pattern.type !== 'ObjectPattern') { return; }
 

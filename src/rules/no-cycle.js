@@ -3,13 +3,20 @@
  * @author Ben Mosher
  */
 
-import resolve from 'eslint-module-utils/resolve';
-import Exports from '../ExportMap';
-import { isExternalModule } from '../core/importType';
+import { getPhysicalFilename } from 'eslint-module-utils/contextCompat';
 import moduleVisitor, { makeOptionsSchema } from 'eslint-module-utils/moduleVisitor';
+import resolve from 'eslint-module-utils/resolve';
+
+import ExportMapBuilder from '../exportMap/builder';
+import StronglyConnectedComponentsBuilder from '../scc';
+import { isExternalModule } from '../core/importType';
 import docsUrl from '../docsUrl';
 
 const traversed = new Set();
+
+function routeString(route) {
+  return route.map((s) => `${s.value}:${s.loc.start.line}`).join('=>');
+}
 
 module.exports = {
   meta: {
@@ -43,11 +50,16 @@ module.exports = {
         type: 'boolean',
         default: false,
       },
+      disableScc: {
+        description: 'When true, don\'t calculate a strongly-connected-components graph. SCC is used to reduce the time-complexity of cycle detection, but adds overhead.',
+        type: 'boolean',
+        default: false,
+      },
     })],
   },
 
   create(context) {
-    const myPath = context.getPhysicalFilename ? context.getPhysicalFilename() : context.getFilename();
+    const myPath = getPhysicalFilename(context);
     if (myPath === '<text>') { return {}; } // can't cycle-check a non-file
 
     const options = context.options[0] || {};
@@ -57,6 +69,8 @@ module.exports = {
       resolve(name, context),
       context,
     );
+
+    const scc = options.disableScc ? {} : StronglyConnectedComponentsBuilder.get(myPath, context);
 
     function checkSourceValue(sourceNode, importer) {
       if (ignoreModule(sourceNode.value)) {
@@ -84,7 +98,7 @@ module.exports = {
         return; // ignore type imports
       }
 
-      const imported = Exports.get(sourceNode.value, context);
+      const imported = ExportMapBuilder.get(sourceNode.value, context);
 
       if (imported == null) {
         return;  // no-unresolved territory
@@ -92,6 +106,16 @@ module.exports = {
 
       if (imported.path === myPath) {
         return;  // no-self-import territory
+      }
+
+      /* If we're in the same Strongly Connected Component,
+       * Then there exists a path from each node in the SCC to every other node in the SCC,
+       * Then there exists at least one path from them to us and from us to them,
+       * Then we have a cycle between us.
+       */
+      const hasDependencyCycle = options.disableScc || scc[myPath] === scc[imported.path];
+      if (!hasDependencyCycle) {
+        return;
       }
 
       const untraversed = [{ mget: () => imported, route: [] }];
@@ -102,6 +126,9 @@ module.exports = {
         traversed.add(m.path);
 
         for (const [path, { getter, declarations }] of m.imports) {
+          // If we're in different SCCs, we can't have a circular dependency
+          if (!options.disableScc && scc[myPath] !== scc[path]) { continue; }
+
           if (traversed.has(path)) { continue; }
           const toTraverse = [...declarations].filter(({ source, isOnlyImportingTypes }) => !ignoreModule(source.value)
             // Ignore only type imports
@@ -125,9 +152,9 @@ module.exports = {
           */
           if (path === myPath && toTraverse.length > 0) { return true; }
           if (route.length + 1 < maxDepth) {
-            for (const { source } of toTraverse) {
+            toTraverse.forEach(({ source }) => {
               untraversed.push({ mget: getter, route: route.concat(source) });
-            }
+            });
           }
         }
       }
@@ -151,7 +178,3 @@ module.exports = {
     });
   },
 };
-
-function routeString(route) {
-  return route.map((s) => `${s.value}:${s.loc.start.line}`).join('=>');
-}

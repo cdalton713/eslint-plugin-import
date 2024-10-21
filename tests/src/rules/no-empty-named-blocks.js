@@ -1,6 +1,6 @@
 import { parsers, test } from '../utils';
 
-import { RuleTester } from 'eslint';
+import { RuleTester } from '../rule-tester';
 
 const ruleTester = new RuleTester();
 const rule = require('rules/no-empty-named-blocks');
@@ -10,6 +10,7 @@ function generateSuggestionsTestCases(cases, parser) {
     code,
     parser,
     errors: [{
+      message: 'Unexpected empty named import block',
       suggestions: [
         {
           desc: 'Remove unused import',

@@ -1,5 +1,6 @@
 import declaredScope from 'eslint-module-utils/declaredScope';
-import Exports from '../ExportMap';
+import ExportMapBuilder from '../exportMap/builder';
+import ExportMap from '../exportMap';
 import docsUrl from '../docsUrl';
 
 function message(deprecation) {
@@ -31,7 +32,7 @@ module.exports = {
       if (node.type !== 'ImportDeclaration') { return; }
       if (node.source == null) { return; } // local export, ignore
 
-      const imports = Exports.get(node.source.value, context);
+      const imports = ExportMapBuilder.get(node.source.value, context);
       if (imports == null) { return; }
 
       const moduleDeprecation = imports.doc && imports.doc.tags.find((t) => t.title === 'deprecated');
@@ -97,7 +98,7 @@ module.exports = {
 
         if (!deprecated.has(node.name)) { return; }
 
-        if (declaredScope(context, node.name) !== 'module') { return; }
+        if (declaredScope(context, node.name, node) !== 'module') { return; }
         context.report({
           node,
           message: message(deprecated.get(node.name)),
@@ -108,13 +109,13 @@ module.exports = {
         if (dereference.object.type !== 'Identifier') { return; }
         if (!namespaces.has(dereference.object.name)) { return; }
 
-        if (declaredScope(context, dereference.object.name) !== 'module') { return; }
+        if (declaredScope(context, dereference.object.name, dereference) !== 'module') { return; }
 
         // go deep
         let namespace = namespaces.get(dereference.object.name);
         const namepath = [dereference.object.name];
         // while property is namespace and parent is member expression, keep validating
-        while (namespace instanceof Exports && dereference.type === 'MemberExpression') {
+        while (namespace instanceof ExportMap && dereference.type === 'MemberExpression') {
           // ignore computed parts for now
           if (dereference.computed) { return; }
 
